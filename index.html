@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video API Safari Test</title>
+  <script src="https://static.opentok.com/v2/js/opentok.min.js"></script>
+  <style>
+    body { font: 16px system-ui, sans-serif; max-width: 700px; margin: 20px auto; padding: 0 14px; }
+    label { display: block; margin-top: 12px; }
+    input { box-sizing: border-box; width: 100%; padding: 10px; }
+    button { margin: 14px 8px 14px 0; padding: 10px 14px; }
+    #publisher, #subscriber { width: 100%; min-height: 180px; margin: 10px 0; }
+    #status { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>Video API Safari Test</h1>
+  <p>Enter disposable test credentials from your Video API project.</p>
+
+  <form id="joinForm">
+    <label>Project API key
+      <input id="apiKey" inputmode="numeric" autocomplete="off" required>
+    </label>
+    <label>Session ID
+      <input id="sessionId" autocomplete="off" required>
+    </label>
+    <label>Client token
+      <input id="token" autocomplete="off" required>
+    </label>
+    <button type="submit">Join and publish</button>
+    <button type="button" id="leaveButton" disabled>Leave session</button>
+  </form>
+
+  <p id="status" role="status">Not connected.</p>
+  <h2>Your camera</h2>
+  <div id="publisher"></div>
+  <h2>Other participants</h2>
+  <div id="subscriber"></div>
+
+  <script>
+    const form = document.getElementById('joinForm');
+    const status = document.getElementById('status');
+    const leaveButton = document.getElementById('leaveButton');
+    let session;
+    let publisher;
+
+    function showError(prefix, error) {
+      status.textContent = prefix + (error && error.message ? error.message : String(error));
+    }
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (!window.OT) {
+        status.textContent = 'OpenTok.js did not load. Check your internet connection and reload.';
+        return;
+      }
+
+      const apiKey = document.getElementById('apiKey').value.trim();
+      const sessionId = document.getElementById('sessionId').value.trim();
+      const token = document.getElementById('token').value.trim();
+      status.textContent = 'Connecting…';
+
+      session = OT.initSession(apiKey, sessionId);
+      session.on('streamCreated', function (event) {
+        session.subscribe(event.stream, 'subscriber', { insertMode: 'append', width: '100%', height: '180px' }, function (error) {
+          if (error) showError('Subscribe error: ', error);
+        });
+      });
+      session.on('sessionDisconnected', function (event) {
+        status.textContent = 'Disconnected: ' + event.reason;
+        leaveButton.disabled = true;
+      });
+
+      publisher = OT.initPublisher('publisher', { publishAudio: true, publishVideo: true, insertMode: 'append', width: '100%', height: '180px' }, function (error) {
+        if (error) showError('Camera/microphone error: ', error);
+      });
+
+      session.connect(token, function (error) {
+        if (error) {
+          showError('Connect error: ', error);
+          return;
+        }
+        session.publish(publisher, function (error) {
+          if (error) {
+            showError('Publish error: ', error);
+            return;
+          }
+          status.textContent = 'Connected and publishing. Allow camera and microphone if Safari asks.';
+          leaveButton.disabled = false;
+        });
+      });
+    });
+
+    leaveButton.addEventListener('click', function () {
+      if (session) session.disconnect();
+      document.getElementById('publisher').replaceChildren();
+      document.getElementById('subscriber').replaceChildren();
+      leaveButton.disabled = true;
+      status.textContent = 'Disconnected.';
+    });
+  </script>
+</body>
+</html>
