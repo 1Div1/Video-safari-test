@@ -63,7 +63,7 @@
 
       session = OT.initSession(apiKey, sessionId);
       session.on('streamCreated', function (event) {
-        session.subscribe(event.stream, 'subscriber', { insertMode: 'append', width: '100%', height: '180px' }, function (error) {
+        session.subscribe(event.stream, 'subscriber', { insertMode: 'append', width: '100%', height: '180px', subscribeToAudio: true }, function (error) {
           if (error) showError('Subscribe error: ', error);
         });
       });
