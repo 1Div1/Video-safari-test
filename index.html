@@ -30,6 +30,10 @@
     </label>
     <button type="submit">Join and publish</button>
     <button type="button" id="leaveButton" disabled>Leave session</button>
+    <label>Archive control passphrase
+      <input id="controlPassword" type="password" autocomplete="off" placeholder="Your Worker CONTROL_PASSWORD">
+    </label>
+    <button type="button" id="startArchiveButton" disabled>Start archive</button>
   </form>
 
   <p id="status" role="status">Not connected.</p>
@@ -42,7 +46,10 @@
     const form = document.getElementById('joinForm');
     const status = document.getElementById('status');
     const leaveButton = document.getElementById('leaveButton');
+    const startArchiveButton = document.getElementById('startArchiveButton');
+    const ARCHIVE_ENDPOINT = 'https://video-ios-test.div-singh.workers.dev/start-archive';
     let session;
+    let currentSessionId = '';
     let publisher;
 
     function showError(prefix, error) {
@@ -59,20 +66,27 @@
       const apiKey = document.getElementById('apiKey').value.trim();
       const sessionId = document.getElementById('sessionId').value.trim();
       const token = document.getElementById('token').value.trim();
+      currentSessionId = sessionId;
       status.textContent = 'Connecting…';
 
       session = OT.initSession(apiKey, sessionId);
       session.on('streamCreated', function (event) {
-        session.subscribe(event.stream, 'subscriber', { insertMode: 'append', width: '100%', height: '180px', subscribeToAudio: true }, function (error) {
+        session.subscribe(event.stream, 'subscriber', {
+          insertMode: 'append', width: '100%', height: '180px'
+        }, function (error) {
           if (error) showError('Subscribe error: ', error);
         });
       });
       session.on('sessionDisconnected', function (event) {
         status.textContent = 'Disconnected: ' + event.reason;
         leaveButton.disabled = true;
+        startArchiveButton.disabled = true;
       });
 
-      publisher = OT.initPublisher('publisher', { publishAudio: true, publishVideo: true, insertMode: 'append', width: '100%', height: '180px' }, function (error) {
+      publisher = OT.initPublisher('publisher', {
+        publishAudio: true, publishVideo: true,
+        insertMode: 'append', width: '100%', height: '180px'
+      }, function (error) {
         if (error) showError('Camera/microphone error: ', error);
       });
 
@@ -88,8 +102,44 @@
           }
           status.textContent = 'Connected and publishing. Allow camera and microphone if Safari asks.';
           leaveButton.disabled = false;
+          startArchiveButton.disabled = false;
         });
       });
+    });
+
+    startArchiveButton.addEventListener('click', async function () {
+      const controlPassword = document.getElementById('controlPassword').value;
+      if (!session || !currentSessionId || leaveButton.disabled) {
+        status.textContent = 'Join and publish first, then start the archive.';
+        return;
+      }
+      if (!controlPassword) {
+        status.textContent = 'Enter the archive-control passphrase configured on the Worker.';
+        return;
+      }
+
+      startArchiveButton.disabled = true;
+      status.textContent = 'Requesting archive start…';
+      try {
+        const response = await fetch(ARCHIVE_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + controlPassword
+          },
+          body: JSON.stringify({ sessionId: currentSessionId })
+        });
+        const result = await response.json().catch(function () { return {}; });
+        if (!response.ok) {
+          throw new Error(result.error || ('Server returned HTTP ' + response.status));
+        }
+        status.textContent = 'Archive started. Archive ID: ' +
+          (result.id || result.archiveId || 'check the server response');
+      } catch (error) {
+        showError('Could not start archive: ', error);
+      } finally {
+        startArchiveButton.disabled = false;
+      }
     });
 
     leaveButton.addEventListener('click', function () {
@@ -97,6 +147,7 @@
       document.getElementById('publisher').replaceChildren();
       document.getElementById('subscriber').replaceChildren();
       leaveButton.disabled = true;
+      startArchiveButton.disabled = true;
       status.textContent = 'Disconnected.';
     });
   </script>
